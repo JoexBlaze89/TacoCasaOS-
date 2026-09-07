@@ -1,48 +1,53 @@
 # Taco Casa OS — Android (Compose) project
 
-This is a full Kotlin/Jetpack Compose rewrite of `taco_casa_os.py`, structured as a
-buildable Android Studio project. Every feature from the original console script has
-a matching screen and view-model method — see the comments in
-`TacoCasaViewModel.kt` for a method-by-method mapping back to the Python source.
+This is a Kotlin/Jetpack Compose rewrite of `taco_casa_os.py`, structured as a buildable Android Studio project. The operational state is persisted through Jetpack DataStore and historical operational changes are captured in an event ledger.
 
 ## How to build the APK
 
-1. Open this folder (`TacoCasaOS/`) directly in Android Studio (File → Open).
-2. Android Studio will detect there's no `gradlew`/`gradle-wrapper.jar` in this
-   folder and will offer to regenerate them automatically — accept that prompt
-   (or run `gradle wrapper` once if you have Gradle installed locally). This step
-   is unavoidable on my end: the wrapper jar is a compiled binary and I don't have
-   network access in this environment to fetch the real one, so I left
-   `gradle/wrapper/gradle-wrapper.properties` in place (pointing at Gradle 8.7)
-   but omitted the jar/scripts rather than ship a fake or corrupt binary.
-3. Let Gradle sync — it will pull the Android Gradle Plugin, Kotlin, and Compose
-   dependencies listed in `app/build.gradle.kts`.
-4. Build → Build Bundle(s) / APK(s) → Build APK(s). The debug APK lands in
-   `app/build/outputs/apk/debug/app-debug.apk`. You can sideload that directly
-   onto a phone or emulator.
-5. For a signed release build, use Build → Generate Signed Bundle / APK and
-   follow Android Studio's signing wizard (you'll need to create a keystore if
-   you don't have one yet).
+1. Open this folder (`TacoCasaOS/`) directly in Android Studio.
+2. Android Studio can regenerate the missing Gradle wrapper files if needed; `gradle/wrapper/gradle-wrapper.properties` points at Gradle 8.7.
+3. Let Gradle sync and resolve the Android, Kotlin, Compose, Serialization, and DataStore dependencies.
+4. Build → Build Bundle(s) / APK(s) → Build APK(s).
 
 ## Project layout
 
 ```
 app/src/main/java/com/tacocasa/os/
-  model/        — TacoCasaState and supporting data classes (port of the Python class's state)
-  data/         — DataStore-backed persistence (port of save_data/load_data)
-  viewmodel/    — TacoCasaViewModel, one method per Python method
-  ui/theme/     — color tokens matching the web build's kitchen-ticket palette
-  ui/components/— the reusable "Ticket" card (the signature visual element)
-  ui/screens/   — Home, Prep, Inventory, Cleaning, Notes — one per nav tab
+  model/        — TacoCasaState and @Serializable supporting data classes
+  data/         — versioned DataStore persistence + OperationalEvent ledger
+  viewmodel/    — TacoCasaViewModel and operational mutations
+  ui/theme/     — Compose theme
+  ui/components/— reusable kitchen-ticket components
+  ui/screens/   — Home, Prep, Inventory, Cleaning, Notes
   MainActivity.kt
+
+app/src/androidTest/java/com/tacocasa/os/
+  TacoCasaRepositoryPersistenceTest.kt — write/recreate/read regression tests
 ```
+
+## Persistence contract
+
+Operational state is encoded as Kotlinx Serialization JSON inside a versioned `PersistedStateEnvelope` and stored in Jetpack DataStore. `LocalDateTime` values use an explicit ISO-8601 serializer. Unknown JSON fields are ignored so additive state-model changes remain backward compatible.
+
+The state schema has an explicit version. Future releases should add migrations in `migrateState()` rather than changing the persisted contract blindly. Legacy raw `TacoCasaState` JSON is also accepted during the transition from the original placeholder implementation.
+
+## Event ledger
+
+Every operational state mutation is observed by the ViewModel persistence loop. The repository persists an append-only bounded ledger of `OperationalEvent` records alongside the current state. Events cover shifts, rush changes, revenue, expenses, staff, inventory, kitchen orders, prep, cleaning, maintenance, notes, complaints, recovery, alerts, and metrics.
+
+This creates the foundation for:
+
+`Observe → Understand → Predict → Recommend → Approve → Act → Verify → Learn`
+
+The current ledger is state-diff based. The next architectural step is to promote important events to first-class domain commands with explicit actor, approval, prediction, outcome, and verification fields.
+
+## Persistence test
+
+`TacoCasaRepositoryPersistenceTest.write_kill_recreate_read_compare` writes a populated operational state, constructs a new repository instance to simulate process recreation, reloads the state, and compares the restored object with the original. A second test verifies the event ledger also survives recreation.
 
 ## What's faithfully ported vs. adapted
 
-- All business logic (rush prediction, labor/food cost math, inventory thresholds,
-  alert conditions, complaint-recovery flows) is ported as-is from the Python source.
-- The CLI's numbered `input()` menu is replaced with real buttons, a persistent
-  bottom nav, and live-updating timers — since "finish into an app" implies an
-  actual touch interface, not a text menu running in a terminal emulator.
-- State now survives app restarts via Jetpack DataStore (the Python version's
-  in-memory state didn't persist between runs at all).
+- Core operational state and business actions remain represented in the Kotlin ViewModel.
+- The CLI's numbered `input()` menu is replaced with Compose touch UI and navigation.
+- State survives app restarts through DataStore instead of remaining only in memory.
+- Historical state changes now survive restart through the event ledger, creating operational memory for later verification and learning.
