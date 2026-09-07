@@ -23,7 +23,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.tacocasa.os.data.TacoCasaRepository
 import com.tacocasa.os.ui.screens.CleaningScreen
 import com.tacocasa.os.ui.screens.HomeScreen
 import com.tacocasa.os.ui.screens.InventoryScreen
@@ -35,64 +39,37 @@ import com.tacocasa.os.viewmodel.TacoCasaViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            TacoCasaOSApp()
-        }
+        setContent { TacoCasaOSApp() }
     }
 }
 
 @Composable
 fun TacoCasaOSApp() {
-    val viewModel: TacoCasaViewModel = viewModel()
+    val context = LocalContext.current.applicationContext
+    val factory = remember(context) {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return TacoCasaViewModel(TacoCasaRepository(context)) as T
+            }
+        }
+    }
+    val viewModel: TacoCasaViewModel = viewModel(factory = factory)
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Home, "Home") },
-                    label = { Text("Home") },
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.ShoppingCart, "Prep") },
-                    label = { Text("Prep") },
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Settings, "Kitchen") },
-                    label = { Text("Kitchen") },
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Info, "Inventory") },
-                    label = { Text("Inventory") },
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Notifications, "Cleaning") },
-                    label = { Text("Cleaning") },
-                    selected = selectedTab == 4,
-                    onClick = { selectedTab = 4 }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Notifications, "Notes") },
-                    label = { Text("Notes") },
-                    selected = selectedTab == 5,
-                    onClick = { selectedTab = 5 }
-                )
+                NavigationBarItem(icon = { Icon(Icons.Filled.Home, "Home") }, label = { Text("Home") }, selected = selectedTab == 0, onClick = { selectedTab = 0 })
+                NavigationBarItem(icon = { Icon(Icons.Filled.ShoppingCart, "Prep") }, label = { Text("Prep") }, selected = selectedTab == 1, onClick = { selectedTab = 1 })
+                NavigationBarItem(icon = { Icon(Icons.Filled.Settings, "Kitchen") }, label = { Text("Kitchen") }, selected = selectedTab == 2, onClick = { selectedTab = 2 })
+                NavigationBarItem(icon = { Icon(Icons.Filled.Info, "Inventory") }, label = { Text("Inventory") }, selected = selectedTab == 3, onClick = { selectedTab = 3 })
+                NavigationBarItem(icon = { Icon(Icons.Filled.Notifications, "Cleaning") }, label = { Text("Cleaning") }, selected = selectedTab == 4, onClick = { selectedTab = 4 })
+                NavigationBarItem(icon = { Icon(Icons.Filled.Notifications, "Notes") }, label = { Text("Notes") }, selected = selectedTab == 5, onClick = { selectedTab = 5 })
             }
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
             when (selectedTab) {
                 0 -> HomeScreen(viewModel)
                 1 -> PrepScreen(viewModel)
