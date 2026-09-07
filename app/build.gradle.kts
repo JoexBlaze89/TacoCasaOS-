@@ -44,6 +44,7 @@ android {
 dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.10.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     implementation("androidx.activity:activity-compose:1.8.0")
     
     // Compose UI & Material3
@@ -56,7 +57,4 @@ dependencies {
     
     // DataStore for persistence
     implementation("androidx.datastore:datastore-preferences:1.0.0")
-    
-    // Kotlin Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 }
