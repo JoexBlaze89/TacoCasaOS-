@@ -14,6 +14,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -21,40 +22,26 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures {
-        compose = true
-    }
+    buildFeatures { compose = true }
 
-    composeOptions {
-        // This should be adjusted to match the Kotlin/Compose versions you use.
-        kotlinCompilerExtensionVersion = "1.6.0"
-    }
+    composeOptions { kotlinCompilerExtensionVersion = "1.6.0" }
 
-    packaging {
-        resources {
-            excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
-        }
-    }
+    packaging { resources { excludes += setOf("/META-INF/{AL2.0,LGPL2.1}") } }
 }
 
 dependencies {
-    // Core Android
     implementation("androidx.core:core-ktx:1.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     implementation("androidx.activity:activity-compose:1.8.0")
-    
-    // Compose UI & Material3
     implementation("androidx.compose.ui:ui:1.5.0")
     implementation("androidx.compose.material3:material3:1.1.0")
-    
-    // Lifecycle & ViewModel
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
-    
-    // DataStore for persistence
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:core:1.5.0")
 }
