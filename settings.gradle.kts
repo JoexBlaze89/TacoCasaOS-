@@ -5,6 +5,7 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -13,5 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TacoCasaOS"
-include(":app")
+rootProject.name = "TacoCasaOS-KMP"
+include(":shared")
+include(":androidApp")
