@@ -1,0 +1,1013 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  Truck,
+  ClipboardList,
+  PackageCheck,
+  Activity,
+  Database,
+  ZapOff,
+  RotateCcw,
+  AlertTriangle,
+  Lock,
+  Send,
+  Save,
+  Search,
+  Plus,
+  Minus,
+  CheckCircle2,
+  AlertCircle,
+  BarChart3,
+  Building2,
+  Layers,
+  PieChart,
+  TrendingUp,
+  X,
+  Info
+} from 'lucide-react';
+
+export type VendorType = 'Bassham Foods' | 'Cardona Foods';
+export type CategoryType = 'ALL' | 'PROTEINS' | 'PRODUCE' | 'TORTILLAS' | 'SAUCES' | 'BEVERAGES' | 'PAPER' | 'CHEMICALS';
+export type ViewType = 'CLIPBOARD' | 'PORTAL' | 'RECEIVING';
+
+export interface CatalogItem {
+  id: string;
+  name: string;
+  vendor: VendorType;
+  category: CategoryType;
+  uom: string;
+  par: number;
+  unitPrice: number;
+  onHand: number;
+}
+
+export type EventType = 'StockCountRecorded' | 'TruckOrderApproved' | 'TruckDeliveryReceived';
+
+export interface BaseDomainEvent {
+  eventId: string;
+  timestamp: string;
+  eventType: EventType;
+}
+
+export interface StockCountRecordedEvent extends BaseDomainEvent {
+  eventType: 'StockCountRecorded';
+  counts: { id: string; onHand: number }[];
+}
+
+export interface OrderLineItem {
+  id: string;
+  name: string;
+  qty: number;
+  price: number;
+  total: number;
+}
+
+export interface TruckOrderApprovedEvent extends BaseDomainEvent {
+  eventType: 'TruckOrderApproved';
+  poNumber: string;
+  vendor: VendorType;
+  items: OrderLineItem[];
+  totalCases: number;
+  totalCost: number;
+  managerId: string;
+  deliveryDay: string;
+}
+
+export interface TruckDeliveryReceivedEvent extends BaseDomainEvent {
+  eventType: 'TruckDeliveryReceived';
+  poNumber: string;
+  receivedItems: OrderLineItem[];
+}
+
+export type DomainEvent = StockCountRecordedEvent | TruckOrderApprovedEvent | TruckDeliveryReceivedEvent;
+
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  text: string;
+}
+
+const MASTER_CATALOG: CatalogItem[] = [
+  // PROTEINS & DAIRY (Bassham Foods)
+  { id: '17463', name: 'BEEF GROUND 86/14 (6 10#AVG)', vendor: 'Bassham Foods', category: 'PROTEINS', uom: 'CS', par: 10, unitPrice: 288.00, onHand: 8 },
+  { id: '24135', name: 'CHEESE CHEDDAR 40 LB WA.60-100 DAY', vendor: 'Bassham Foods', category: 'PROTEINS', uom: 'CS', par: 8, unitPrice: 89.10, onHand: 3 },
+  { id: '24569', name: 'SOUR CREAM POUCH (6 4.5#)', vendor: 'Bassham Foods', category: 'PROTEINS', uom: 'CS', par: 4, unitPrice: 33.11, onHand: 2 },
+  { id: '59407', name: 'PINTO BEANS PREWASHED (1 20#)', vendor: 'Bassham Foods', category: 'PROTEINS', uom: 'CS', par: 8, unitPrice: 14.39, onHand: 6 },
+  { id: '53414', name: 'NACHO CHEESE SAUCE POUCH PACK (6 107 OZ.)', vendor: 'Bassham Foods', category: 'PROTEINS', uom: 'CS', par: 3, unitPrice: 65.15, onHand: 2 },
+
+  // PRODUCE & COLD (Bassham Foods)
+  { id: '19188', name: 'ROMA TOMATOES (1 25LBS)', vendor: 'Bassham Foods', category: 'PRODUCE', uom: 'CS', par: 4, unitPrice: 25.84, onHand: 2 },
+  { id: '19349', name: 'GREEN GATE SHRED LETTUCE (4 5LB)', vendor: 'Bassham Foods', category: 'PRODUCE', uom: 'CS', par: 10, unitPrice: 18.10, onHand: 4 },
+  { id: '19514', name: 'TACO CASA GUACAMOLE (16 8OZ)', vendor: 'Bassham Foods', category: 'PRODUCE', uom: 'CS', par: 1, unitPrice: 32.50, onHand: 1 },
+  { id: '43226', name: 'OLIVES RIPE SLICED BLACK MUSCO (6 #10)', vendor: 'Bassham Foods', category: 'PRODUCE', uom: 'CS', par: 1, unitPrice: 70.41, onHand: 1 },
+  { id: '43295', name: 'JALAPENOS SLICED 3/16 REFRIGERATED (4 1GAL)', vendor: 'Bassham Foods', category: 'PRODUCE', uom: 'CS', par: 1, unitPrice: 33.32, onHand: 1 },
+
+  // TORTILLAS & SHELLS (Cardona Foods & Bassham)
+  { id: '23001', name: 'TORTILLA 10 DIE CUT FLOUR (SALAD BOWL) (12 2 DOZ)', vendor: 'Cardona Foods', category: 'TORTILLAS', uom: 'CS', par: 10, unitPrice: 42.56, onHand: 1 },
+  { id: 'TC203', name: 'TORTILLA DIE CUT 7 OVAL (TACO LITE) (16 24 CT)', vendor: 'Cardona Foods', category: 'TORTILLAS', uom: 'CS', par: 5, unitPrice: 27.80, onHand: 1 },
+  { id: 'CARD-6', name: '6" FLOUR TORTILLAS (12 24 CT)', vendor: 'Cardona Foods', category: 'TORTILLAS', uom: 'CS', par: 4, unitPrice: 38.00, onHand: 2 },
+  { id: 'CARD-120', name: '120\'s CORN TACO SHELLS', vendor: 'Cardona Foods', category: 'TORTILLAS', uom: 'CS', par: 12, unitPrice: 32.00, onHand: 6 },
+  { id: '31310', name: 'BUNS HAMBURGER 4 PLAIN (8 12CT)', vendor: 'Bassham Foods', category: 'TORTILLAS', uom: 'CS', par: 2, unitPrice: 27.89, onHand: 1 },
+
+  // SAUCES & SPICES (Bassham Foods)
+  { id: 'TC567', name: 'TC RED CHILI SEASONING (16 2#)', vendor: 'Bassham Foods', category: 'SAUCES', uom: 'CS', par: 2, unitPrice: 136.52, onHand: 1 },
+  { id: '43130', name: 'TC HOT SAUCE PACKET (1000 9 GRM)', vendor: 'Bassham Foods', category: 'SAUCES', uom: 'CS', par: 4, unitPrice: 41.15, onHand: 2 },
+  { id: '43129', name: 'TC GREEN SAUCE POUCH (8 4#)', vendor: 'Bassham Foods', category: 'SAUCES', uom: 'CS', par: 3, unitPrice: 38.35, onHand: 1 },
+  { id: '43125', name: 'TC SALSA CUPS (60 3 OZ)', vendor: 'Bassham Foods', category: 'SAUCES', uom: 'CS', par: 6, unitPrice: 25.63, onHand: 2 },
+  { id: '51267', name: 'EFG SUGAR TACO CASA (10 3.5#)', vendor: 'Bassham Foods', category: 'SAUCES', uom: 'CS', par: 4, unitPrice: 30.99, onHand: 2 },
+  { id: '51242', name: 'OIL WHITE COCONUT NTF (1 50#)', vendor: 'Bassham Foods', category: 'SAUCES', uom: 'CS', par: 1, unitPrice: 99.99, onHand: 1 },
+
+  // BEVERAGES & BIB SYRUP (Bassham Foods)
+  { id: '52539', name: 'ICED TEA FILTER PACK TACO CASA (96 3 OZ)', vendor: 'Bassham Foods', category: 'BEVERAGES', uom: 'CS', par: 2, unitPrice: 48.64, onHand: 1 },
+  { id: '42104', name: 'SODA COKE CLASSIC BIB 5GAL (1 5 GAL)', vendor: 'Bassham Foods', category: 'BEVERAGES', uom: 'CS', par: 2, unitPrice: 115.95, onHand: 1 },
+  { id: '42105', name: 'SODA DIET COKE BIB 5 GL (1 5 GAL)', vendor: 'Bassham Foods', category: 'BEVERAGES', uom: 'CS', par: 2, unitPrice: 115.95, onHand: 1 },
+  { id: '42107', name: 'SODA DR PEPPER BIB 5 GL (1 5 GAL)', vendor: 'Bassham Foods', category: 'BEVERAGES', uom: 'CS', par: 2, unitPrice: 114.70, onHand: 1 },
+
+  // PACKAGING & PAPER (Bassham Foods)
+  { id: 'TC20', name: 'TC CUPS 20 OZ. VERSALITE (30 29 CT.)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 2, unitPrice: 105.60, onHand: 1 },
+  { id: 'TC30', name: 'TC CUPS 30 OZ. VERSALITE (25 27 CT.)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 2, unitPrice: 94.11, onHand: 1 },
+  { id: 'TC30L', name: 'TC LIDS 30 OZ. (20 100 CT.)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 1, unitPrice: 70.42, onHand: 1 },
+  { id: 'TC620', name: 'TC BEAN CUP 8 OZ. GFC0016 LID# TC621 (20 50 CT)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 1, unitPrice: 40.24, onHand: 1 },
+  { id: '81003', name: 'KRAFT PAPER BAGS #6 (1 500CT)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 2, unitPrice: 16.25, onHand: 1 },
+  { id: 'TC602', name: 'TACO CASA TO GO BAGS EST. 1972 (1 500 CT.)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 1, unitPrice: 31.14, onHand: 1 },
+  { id: 'TC625', name: 'TC T/BURRITO WRAP YELLOW EST. 1972 (5 1000)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 1, unitPrice: 78.34, onHand: 1 },
+  { id: '81258', name: 'HINGED 4 COMP STYRO TRAY (2 100 CT)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 2, unitPrice: 24.58, onHand: 1 },
+  { id: '81240', name: 'HINGED 1 COMP 8.4X7.9X3.3 (2 100 CT)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 1, unitPrice: 22.78, onHand: 1 },
+  { id: 'TCNAT', name: 'NAPKIN TC-NAT INSTA-NAP (12 500 CT)', vendor: 'Bassham Foods', category: 'PAPER', uom: 'CS', par: 2, unitPrice: 37.42, onHand: 1 },
+
+  // CHEMICALS & CLEANING (Bassham Foods)
+  { id: '63070', name: 'SOAP POT & PAN LIQ DAWN 4/1GL #57445 (4 1 GAL)', vendor: 'Bassham Foods', category: 'CHEMICALS', uom: 'CS', par: 1, unitPrice: 65.94, onHand: 1 },
+  { id: '43705', name: 'VINEGAR WHITE DISTILLED 5% 50 GRAIN (6 1 GAL)', vendor: 'Bassham Foods', category: 'CHEMICALS', uom: 'CS', par: 1, unitPrice: 17.87, onHand: 1 },
+  { id: '81635', name: 'GLOVES VINYL LGR HD PF (10 100 CT)', vendor: 'Bassham Foods', category: 'CHEMICALS', uom: 'CS', par: 1, unitPrice: 28.25, onHand: 1 }
+];
+
+const generateUUID = (): string => {
+  return 'evt-' + Math.random().toString(36).substring(2, 9) + '-' + Date.now().toString(36);
+};
+
+const VALID_MANAGERS: Record<string, string> = {
+  '1234': 'MGR_MAYON',
+  '7777': 'MGR_RODRIGUEZ'
+};
+
+export default function App() {
+  // Navigation & Filtering state
+  const [activeView, setActiveView] = useState<ViewType>('CLIPBOARD');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryType>('ALL');
+  const [vendorFilter, setVendorFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Event Ledger & Projection state
+  const [ledger, setLedger] = useState<DomainEvent[]>([]);
+  const [inventory, setInventory] = useState<Record<string, CatalogItem>>(() => {
+    const map: Record<string, CatalogItem> = {};
+    MASTER_CATALOG.forEach(item => {
+      map[item.id] = { ...item };
+    });
+    return map;
+  });
+
+  // Active Transmitted Order state
+  const [activeOrder, setActiveOrder] = useState<TruckOrderApprovedEvent | null>(null);
+  const [orderReceived, setOrderReceived] = useState<boolean>(false);
+
+  // Portal overrides and security inputs
+  const [portalOverrides, setPortalOverrides] = useState<Record<string, number>>({});
+  const [managerPin, setManagerPin] = useState<string>('');
+
+  // System crash simulation state
+  const [isCrashed, setIsCrashed] = useState<boolean>(false);
+
+  // Toast System
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const showToast = useCallback((text: string, type: ToastMessage['type'] = 'info') => {
+    const id = generateUUID();
+    setToasts(prev => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3500);
+  }, []);
+
+  const applyEventToProjections = useCallback((event: DomainEvent) => {
+    if (event.eventType === 'StockCountRecorded') {
+      setInventory(prev => {
+        const next = { ...prev };
+        event.counts.forEach(c => {
+          if (next[c.id]) {
+            next[c.id] = { ...next[c.id], onHand: c.onHand };
+          }
+        });
+        return next;
+      });
+    } else if (event.eventType === 'TruckOrderApproved') {
+      setActiveOrder(event);
+      setOrderReceived(false);
+    } else if (event.eventType === 'TruckDeliveryReceived') {
+      setActiveOrder(prev => (prev && prev.poNumber === event.poNumber ? prev : prev));
+      setOrderReceived(true);
+      setInventory(prev => {
+        const next = { ...prev };
+        event.receivedItems.forEach(item => {
+          if (next[item.id]) {
+            next[item.id] = { ...next[item.id], onHand: next[item.id].onHand + item.qty };
+          }
+        });
+        return next;
+      });
+    }
+  }, []);
+
+  const dispatchEvent = useCallback((event: DomainEvent) => {
+    setLedger(prev => [...prev, event]);
+    applyEventToProjections(event);
+  }, [applyEventToProjections]);
+
+  const handleCrash = () => {
+    setIsCrashed(true);
+    // Wipe in-memory projections to simulate data loss
+    setInventory({});
+    setActiveOrder(null);
+    setOrderReceived(false);
+    showToast("⚠️ Server In-Memory Projections Wiped!", "error");
+  };
+
+  const handleReplay = () => {
+    if (ledger.length === 0) {
+      showToast("No events in ledger to replay.", "warning");
+      return;
+    }
+    // Rebuild initial base state
+    const baseInventory: Record<string, CatalogItem> = {};
+    MASTER_CATALOG.forEach(item => {
+      baseInventory[item.id] = { ...item };
+    });
+    setInventory(baseInventory);
+    setActiveOrder(null);
+    setOrderReceived(false);
+
+    // Replay chronologically
+    ledger.forEach(evt => {
+      if (evt.eventType === 'StockCountRecorded') {
+        evt.counts.forEach(c => {
+          if (baseInventory[c.id]) {
+            baseInventory[c.id].onHand = c.onHand;
+          }
+        });
+      } else if (evt.eventType === 'TruckOrderApproved') {
+        setActiveOrder(evt);
+        setOrderReceived(false);
+      } else if (evt.eventType === 'TruckDeliveryReceived') {
+        setOrderReceived(true);
+        evt.receivedItems.forEach(item => {
+          if (baseInventory[item.id]) {
+            baseInventory[item.id].onHand += item.qty;
+          }
+        });
+      }
+    });
+
+    setIsCrashed(false);
+    showToast(`Replayed ${ledger.length} events from immutable ledger! System self-healed.`, "success");
+  };
+
+  const handleUpdateOnHand = (id: string, newQty: number) => {
+    const val = Math.max(0, newQty);
+    setInventory(prev => ({
+      ...prev,
+      [id]: prev[id] ? { ...prev[id], onHand: val } : prev[id]
+    }));
+  };
+
+  const handleSaveStockCount = () => {
+    if (isCrashed) {
+      showToast("System is crashed! Please Replay projection first.", "error");
+      return;
+    }
+    const counts = Object.values(inventory).map(item => ({ id: item.id, onHand: item.onHand }));
+    const event: StockCountRecordedEvent = {
+      eventId: generateUUID(),
+      timestamp: new Date().toISOString(),
+      eventType: 'StockCountRecorded',
+      counts
+    };
+    dispatchEvent(event);
+    showToast("Stock count recorded in Event Ledger!", "success");
+  };
+
+  const applyPresetCount = (type: 'PAR' | 'LOW') => {
+    if (isCrashed) return;
+    setInventory(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        if (type === 'PAR') next[id].onHand = next[id].par;
+        if (type === 'LOW') next[id].onHand = Math.floor(next[id].par * 0.3);
+      });
+      return next;
+    });
+    showToast(`Preset simulator applied: ${type}`, "info");
+  };
+
+  const handleSubmitBasshamOrder = () => {
+    if (isCrashed) {
+      showToast("System is crashed! Replay before submitting.", "error");
+      return;
+    }
+    if (!managerPin || !VALID_MANAGERS[managerPin]) {
+      showToast("Access Denied: Invalid Manager Credentials PIN.", "error");
+      return;
+    }
+
+    const managerId = VALID_MANAGERS[managerPin];
+    const itemsToOrder: OrderLineItem[] = [];
+    let totalCases = 0;
+    let totalCost = 0;
+
+    Object.values(inventory)
+      .filter(i => i.vendor === 'Bassham Foods')
+      .forEach(item => {
+        const recommended = Math.max(0, item.par - item.onHand);
+        const qty = portalOverrides[item.id] !== undefined ? portalOverrides[item.id] : recommended;
+        if (qty > 0) {
+          const lineTotal = qty * item.unitPrice;
+          totalCases += qty;
+          totalCost += lineTotal;
+          itemsToOrder.push({
+            id: item.id,
+            name: item.name,
+            qty,
+            price: item.unitPrice,
+            total: lineTotal
+          });
+        }
+      });
+
+    if (itemsToOrder.length === 0) {
+      showToast("No items selected for order creation.", "warning");
+      return;
+    }
+
+    const poNumber = "WEBORD" + Math.floor(1000 + Math.random() * 9000);
+    const event: TruckOrderApprovedEvent = {
+      eventId: generateUUID(),
+      timestamp: new Date().toISOString(),
+      eventType: 'TruckOrderApproved',
+      poNumber,
+      vendor: 'Bassham Foods',
+      items: itemsToOrder,
+      totalCases,
+      totalCost,
+      managerId,
+      deliveryDay: 'Thursday AM Truck'
+    };
+
+    dispatchEvent(event);
+    setManagerPin('');
+    setPortalOverrides({});
+    setActiveView('RECEIVING');
+    showToast(`Order #${poNumber} transmitted by ${managerId}!`, "success");
+  };
+
+  const handleReceiveDelivery = () => {
+    if (!activeOrder || orderReceived) return;
+    const event: TruckDeliveryReceivedEvent = {
+      eventId: generateUUID(),
+      timestamp: new Date().toISOString(),
+      eventType: 'TruckDeliveryReceived',
+      poNumber: activeOrder.poNumber,
+      receivedItems: activeOrder.items
+    };
+    dispatchEvent(event);
+    showToast(`Truck Delivery #${activeOrder.poNumber} posted to Store #52 On-Hand Stock!`, "success");
+  };
+
+  const filteredClipboardItems = useMemo(() => {
+    return Object.values(inventory)
+      .filter(item => categoryFilter === 'ALL' || item.category === categoryFilter)
+      .filter(item => vendorFilter === 'ALL' || item.vendor === vendorFilter)
+      .filter(item => searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [inventory, categoryFilter, vendorFilter, searchQuery]);
+
+  const inventoryMetrics = useMemo(() => {
+    let totalValue = 0;
+    let totalItems = 0;
+    let healthyItems = 0;
+    const criticalLow: CatalogItem[] = [];
+
+    Object.values(inventory).forEach(item => {
+      totalValue += item.onHand * item.unitPrice;
+      totalItems++;
+      if (item.onHand >= item.par) {
+        healthyItems++;
+      } else {
+        criticalLow.push(item);
+      }
+    });
+
+    const parFulfillmentRate = totalItems > 0 ? Math.round((healthyItems / totalItems) * 100) : 0;
+    return { totalValue, parFulfillmentRate, criticalLow };
+  }, [inventory]);
+
+  return (
+    <div className="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-red-600 selection:text-white">
+      
+      {/* TOP HEADER NAV */}
+      <header className="bg-slate-900/95 border-b border-slate-800 backdrop-blur sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-red-600 text-yellow-300 px-3 py-1.5 rounded-lg font-black text-lg tracking-wider shadow-lg shadow-red-900/30 flex items-center gap-2">
+              <Truck className="w-5 h-5" />
+              <span>TACO CASA INVENTORY</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-slate-800 border border-slate-700 text-xs px-2.5 py-0.5 rounded text-slate-300 font-mono font-bold">Store #52</span>
+                <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono font-semibold">TSX Architecture Active</span>
+              </div>
+              <p className="text-[11px] text-slate-400 hidden sm:block">Event-Sourced Store Stock Count & Truck Order Portal</p>
+            </div>
+          </div>
+
+          {/* VIEW TOGGLES & SYSTEM CONTROLS */}
+          <div className="flex items-center gap-2">
+            <div className="bg-slate-950 border border-slate-800 p-1 rounded-lg flex gap-1">
+              <button
+                onClick={() => setActiveView('CLIPBOARD')}
+                className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                  activeView === 'CLIPBOARD' ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                <span>Count Clipboard</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('PORTAL')}
+                className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                  activeView === 'PORTAL' ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Order Entry</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('RECEIVING')}
+                className={`px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+                  activeView === 'RECEIVING' ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <PackageCheck className="w-3.5 h-3.5" />
+                <span>Receiving & Projections</span>
+              </button>
+            </div>
+
+            <div className="h-6 w-[1px] bg-slate-800 hidden md:block"></div>
+
+            <button
+              onClick={handleCrash}
+              title="Simulate In-Memory Server Loss"
+              className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60 px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition"
+            >
+              <ZapOff className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden lg:inline">Crash</span>
+            </button>
+
+            <button
+              onClick={handleReplay}
+              title="Reconstruct Projections from Ledger"
+              className="bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/60 px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden lg:inline">Replay</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* SYSTEM CRASH WARNING BANNER */}
+      {isCrashed && (
+        <div className="bg-red-950/90 border-b border-red-800 px-4 py-2 text-center text-xs font-medium text-red-300 flex items-center justify-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-400 animate-pulse" />
+          <span>⚠️ CATASTROPHIC IN-MEMORY CRASH SIMULATED! Read projections wiped to 0. Click 'Replay' to reconstruct state from immutable store ledger.</span>
+        </div>
+      )}
+
+      {/* MAIN CONTAINER */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* LEFT / CENTER WORKSPACE AREA */}
+        <div className="lg:col-span-8 flex flex-col gap-5">
+
+          {/* ============================================================================ */}
+          {/* VIEW 1: DIGITAL INVENTORY COUNT CLIPBOARD */}
+          {/* ============================================================================ */}
+          {activeView === 'CLIPBOARD' && (
+            <div className="flex flex-col gap-4">
+              
+              {/* CLIPBOARD TOOLBAR */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-red-500" />
+                    <h2 class="font-bold text-slate-100 text-base">Taco Casa #52 Store Inventory Clipboard</h2>
+                  </div>
+                  <p className="text-xs text-slate-400">Recorded on-hand stock generates automated PAR build-to truck orders.</p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <div className="relative flex-1 sm:w-48">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="Search items..."
+                      className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded pl-8 pr-2.5 py-1 font-semibold focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+                  <select
+                    value={vendorFilter}
+                    onChange={e => setVendorFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2.5 py-1 font-semibold focus:outline-none focus:border-red-500"
+                  >
+                    <option value="ALL">All Vendors</option>
+                    <option value="Bassham Foods">Bassham Foods</option>
+                    <option value="Cardona Foods">Cardona Foods</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* CATEGORY SELECTOR TABS */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+                {[
+                  { id: 'ALL', label: 'All Items' },
+                  { id: 'PROTEINS', label: '🥩 Meat & Cheese' },
+                  { id: 'PRODUCE', label: '🥬 Produce & Cold' },
+                  { id: 'TORTILLAS', label: '🌮 Tortillas & Chips' },
+                  { id: 'SAUCES', label: '🌶️ Sauces & Spices' },
+                  { id: 'BEVERAGES', label: '🥤 Soda BIB & Tea' },
+                  { id: 'PAPER', label: '📦 Cups & Packaging' },
+                  { id: 'CHEMICALS', label: '🧹 Soap & Cleaning' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategoryFilter(cat.id as CategoryType)}
+                    className={`px-3 py-1.5 rounded-lg font-bold whitespace-nowrap transition ${
+                      categoryFilter === cat.id
+                        ? 'bg-red-600 text-white shadow'
+                        : 'bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* COUNT TABLE */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xl overflow-hidden">
+                <div className="max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-950 text-slate-400 font-mono text-[10px] uppercase sticky top-0 z-10 border-b border-slate-800">
+                      <tr>
+                        <th className="p-2.5">Item #</th>
+                        <th className="p-2.5">Description</th>
+                        <th className="p-2.5 text-center">Build To (PAR)</th>
+                        <th className="p-2.5 text-center">On Hand Count</th>
+                        <th className="p-2.5 text-center">Order Qty</th>
+                        <th className="p-2.5 text-right pr-3">Est. Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans">
+                      {filteredClipboardItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-slate-500 italic">
+                            No matching inventory items found.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredClipboardItems.map(item => {
+                          const orderCases = Math.max(0, item.par - item.onHand);
+                          const estCost = orderCases * item.unitPrice;
+
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                              <td className="p-2.5 font-mono text-slate-400 font-bold">{item.id}</td>
+                              <td className="p-2.5">
+                                <div className="font-semibold text-slate-100">{item.name}</div>
+                                <div className="text-[10px] text-slate-500 font-mono">
+                                  {item.vendor} • ${item.unitPrice.toFixed(2)} / {item.uom}
+                                </div>
+                              </td>
+                              <td className="p-2.5 text-center font-mono text-slate-300 font-bold">
+                                {item.par} {item.uom}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <div className="inline-flex items-center gap-1 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5">
+                                  <button
+                                    onClick={() => handleUpdateOnHand(item.id, item.onHand - 1)}
+                                    className="text-slate-400 hover:text-red-400 font-bold px-1.5 text-sm transition"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={item.onHand}
+                                    onChange={e => handleUpdateOnHand(item.id, parseInt(e.target.value) || 0)}
+                                    className="w-12 bg-transparent text-center font-mono text-amber-300 font-bold text-xs focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateOnHand(item.id, item.onHand + 1)}
+                                    className="text-slate-400 hover:text-emerald-400 font-bold px-1.5 text-sm transition"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </td>
+                              <td
+                                className={`p-2.5 text-center font-mono font-bold ${
+                                  orderCases > 0
+                                    ? 'text-amber-400 bg-amber-950/30 border border-amber-800/50 rounded'
+                                    : 'text-slate-500'
+                                }`}
+                              >
+                                {orderCases} {item.uom}
+                              </td>
+                              <td className="p-2.5 text-right pr-3 font-mono text-emerald-400 font-semibold">
+                                ${estCost.toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* FOOTER ACTIONS */}
+                <div className="mt-3 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => applyPresetCount('PAR')}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs transition"
+                    >
+                      Set All = PAR
+                    </button>
+                    <button
+                      onClick={() => applyPresetCount('LOW')}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs transition"
+                    >
+                      Simulate Low Stock
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={handleSaveStockCount}
+                    className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2 rounded-lg text-xs flex items-center gap-2 shadow-lg shadow-red-950/50 transition"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save Count & Calculate Truck Order</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ============================================================================ */}
+          {/* VIEW 2: BASSHAM FOODS PORTAL SIMULATOR */}
+          {/* ============================================================================ */}
+          {activeView === 'PORTAL' && (
+            <div className="flex flex-col gap-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col">
+                
+                {/* BROWSER BAR */}
+                <div className="bg-slate-950 border-b border-slate-800 px-3 py-2 flex items-center justify-between text-xs text-slate-400 font-mono">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>
+                    </div>
+                    <span className="bg-slate-900 border border-slate-800 px-3 py-0.5 rounded text-[11px] text-slate-300 flex items-center gap-1.5">
+                      <Lock className="w-3 h-3 text-emerald-400" />
+                      basshamfoods.foodorderentry.com
+                    </span>
+                  </div>
+                  <span className="font-bold text-amber-400">PO: WEBORD-DRAFT</span>
+                </div>
+
+                {/* BASSHAM BRAND HEADER */}
+                <div className="bg border-b border-red-900 bg-red-900 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white text-red-900 font-black px-2.5 py-1 rounded font-serif text-lg tracking-tight">
+                      BASSHAM FOODS
+                    </div>
+                    <div className="text-white">
+                      <h3 className="font-bold text-sm leading-tight">Order Entry System</h3>
+                      <p className="text-[10px] text-red-100">Direct Store Delivery Portal • Taco Casa #52</p>
+                    </div>
+                  </div>
+
+                  <div className="text-right text-xs text-white">
+                    <span className="block font-semibold">Delivery Day: <span className="text-yellow-300">Thursday AM Truck</span></span>
+                    <span className="text-[10px] text-red-200">Order Cutoff: 4:00 PM CST</span>
+                  </div>
+                </div>
+
+                {/* BASSHAM ORDER TABLE */}
+                <div className="p-3 bg-slate-900 overflow-x-auto">
+                  <div className="max-h-[420px] overflow-y-auto">
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[11px] sticky top-0 z-10">
+                        <tr>
+                          <th className="p-2 text-center w-12">Qty</th>
+                          <th className="p-2 w-12">UOM</th>
+                          <th className="p-2 w-24">Item #</th>
+                          <th className="p-2">Description</th>
+                          <th className="p-2 text-right">Price</th>
+                          <th className="p-2 text-right pr-3">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80 text-slate-200">
+                        {Object.values(inventory)
+                          .filter(i => i.vendor === 'Bassham Foods')
+                          .map(item => {
+                            const recommended = Math.max(0, item.par - item.onHand);
+                            const currentQty = portalOverrides[item.id] !== undefined ? portalOverrides[item.id] : recommended;
+                            const lineTotal = currentQty * item.unitPrice;
+
+                            return (
+                              <tr key={item.id} className={`${currentQty > 0 ? 'bg-slate-800/40' : 'opacity-60'} hover:bg-slate-800/80`}>
+                                <td className="p-2 text-center">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={currentQty}
+                                    onChange={e => {
+                                      const num = parseInt(e.target.value) || 0;
+                                      setPortalOverrides(prev => ({ ...prev, [item.id]: num }));
+                                    }}
+                                    className="w-12 bg-slate-950 border border-slate-700 rounded text-center py-0.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400"
+                                  />
+                                </td>
+                                <td className="p-2 text-slate-400">{item.uom}</td>
+                                <td className="p-2 text-red-400 font-bold">{item.id}</td>
+                                <td className="p-2 text-slate-200 font-sans">{item.name}</td>
+                                <td className="p-2 text-right text-slate-400">${item.unitPrice.toFixed(2)}</td>
+                                <td className={`p-2 text-right pr-3 font-bold ${currentQty > 0 ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                  ${lineTotal.toFixed(2)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* PORTAL TOTALS AND AUTHORIZATION GATE */}
+                  <div className="mt-3 bg-slate-950 border border-slate-800 p-3 rounded-lg flex flex-wrap items-center justify-between gap-4 font-mono">
+                    <div className="flex items-center gap-6 text-xs">
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">TOTAL ITEMS</span>
+                        <span className="text-slate-100 font-bold text-sm">
+                          {Object.values(inventory).filter(i => i.vendor === 'Bassham Foods' && (portalOverrides[i.id] ?? Math.max(0, i.par - i.onHand)) > 0).length} Items
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">TOTAL FREIGHT CASES</span>
+                        <span className="text-amber-400 font-bold text-sm">
+                          {Object.values(inventory)
+                            .filter(i => i.vendor === 'Bassham Foods')
+                            .reduce((sum, i) => sum + (portalOverrides[i.id] ?? Math.max(0, i.par - i.onHand)), 0)} Cases
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">ORDER TOTAL COST</span>
+                        <span className="text-emerald-400 font-bold text-base">
+                          $
+                          {Object.values(inventory)
+                            .filter(i => i.vendor === 'Bassham Foods')
+                            .reduce((sum, i) => sum + ((portalOverrides[i.id] ?? Math.max(0, i.par - i.onHand)) * i.unitPrice), 0)
+                            .toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-slate-400">Manager PIN:</span>
+                        <input
+                          type="password"
+                          placeholder="1234 or 7777"
+                          value={managerPin}
+                          onChange={e => setManagerPin(e.target.value)}
+                          className="w-28 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-amber-400 font-mono"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleSubmitBasshamOrder}
+                        className="bg-red-700 hover:bg-red-600 text-white font-bold px-5 py-2 rounded text-xs tracking-wider uppercase shadow-lg shadow-red-950/60 transition flex items-center gap-2"
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>Submit Order</span>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================================ */}
+          {/* VIEW 3: RECEIVING & STORE HEALTH MODEL */}
+          {/* ============================================================================ */}
+          {activeView === 'RECEIVING' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* TRANSMITTED TRUCK MANIFEST */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-5 h-5 text-amber-400" />
+                    <h3 className="font-bold text-slate-200 text-sm">Active Truck Order Delivery</h3>
+                  </div>
+                  {activeOrder ? (
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                      orderReceived 
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' 
+                        : 'bg-amber-950 text-amber-400 border border-amber-800'
+                    }`}>
+                      {orderReceived ? 'RECEIVED & POSTED' : `TRANSMITTED (${activeOrder.poNumber})`}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">
+                      NO ACTIVE ORDER
+                    </span>
+                  )}
+                </div>
+
+                <div className="min-h-[220px] max-h-[320px] overflow-y-auto space-y-2">
+                  {!activeOrder ? (
+                    <div className="p-8 border border-dashed border-slate-800 rounded-lg text-center text-slate-500 text-xs">
+                      <Truck className="w-8 h-8 mx-auto mb-2 stroke-1 opacity-50" />
+                      <span>No transmitted truck orders currently pending delivery.</span>
+                    </div>
+                  ) : (
+                    activeOrder.items.map(item => (
+                      <div key={item.id} className="bg-slate-950 border border-slate-800 p-2.5 rounded flex justify-between items-center text-xs">
+                        <div>
+                          <div className="font-bold text-slate-200">{item.name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {item.qty} Cases @ ${item.price.toFixed(2)}
+                          </div>
+                        </div>
+                        <span className="font-mono text-emerald-400 font-bold">${item.total.toFixed(2)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <button
+                  onClick={handleReceiveDelivery}
+                  disabled={!activeOrder || orderReceived}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-2.5 rounded-lg text-xs flex items-center justify-center gap-2 transition"
+                >
+                  <PackageCheck className="w-4 h-4" />
+                  <span>Receive Delivery (Update Store On-Hand)</span>
+                </button>
+              </div>
+
+              {/* STORE HEALTH METRICS */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col gap-3">
+                <div className="border-b border-slate-800 pb-2.5 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-200 text-sm flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-blue-400" />
+                    Store #52 Inventory Health
+                  </h3>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                    isCrashed 
+                      ? 'bg-red-950 text-red-400 border border-red-800' 
+                      : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                  }`}>
+                    {isCrashed ? 'PROJECTION CRASHED' : 'PROJECTION ACTIVE'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg">
+                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">Stock Valuation</span>
+                    <span className="text-xl font-bold font-mono text-emerald-400">${inventoryMetrics.totalValue.toFixed(2)}</span>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg">
+                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">PAR Fulfillment Rate</span>
+                    <span className="text-xl font-bold font-mono text-slate-100">{inventoryMetrics.parFulfillmentRate}%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Critical Low Stock Items (&lt; PAR)</span>
+                  <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
+                    {inventoryMetrics.criticalLow.length === 0 ? (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> All items fully stocked at or above PAR.
+                      </span>
+                    ) : (
+                      inventoryMetrics.criticalLow.map(item => (
+                        <div key={item.id} className="bg-slate-950 border border-slate-800 p-2 rounded flex items-center justify-between text-xs">
+                          <span className="text-slate-200 font-semibold truncate max-w-[200px]">{item.name}</span>
+                          <span className="font-mono text-red-400 font-bold">{item.onHand} / {item.par} {item.uom}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+        {/* RIGHT COLUMN: IMMUTABLE STORE EVENT LEDGER */}
+        <div className="lg:col-span-4 flex flex-col">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-col flex-1 gap-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-purple-400" />
+                <h2 className="font-bold text-slate-200 text-sm uppercase tracking-wider">Store #52 Event Ledger</h2>
+              </div>
+              <span className="text-xs bg-purple-950 border border-purple-800 text-purple-300 font-mono px-2 py-0.5 rounded">
+                {ledger.length} Events
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400">Append-only supply chain event store powering all read projections and disaster recovery.</p>
+
+            {/* AUDIT STREAM LIST */}
+            <div className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2.5 overflow-y-auto max-h-[580px] flex flex-col gap-2 font-mono text-xs">
+              {ledger.length === 0 ? (
+                <span className="text-slate-600 text-[11px] italic">Ledger empty. Record counts or submit orders to append canonical events.</span>
+              ) : (
+                ledger.slice().reverse().map(evt => {
+                  let badgeStyle = 'text-blue-400 bg-blue-950/80 border-blue-800';
+                  let details = '';
+
+                  if (evt.eventType === 'StockCountRecorded') {
+                    badgeStyle = 'text-slate-300 bg-slate-800 border-slate-700';
+                    details = `Physical count recorded for ${evt.counts.length} items`;
+                  } else if (evt.eventType === 'TruckOrderApproved') {
+                    badgeStyle = 'text-amber-400 bg-amber-950/80 border-amber-800';
+                    details = `PO #${evt.poNumber} (${evt.vendor}) • ${evt.totalCases} CS ($${evt.totalCost.toFixed(2)}) • Auth: ${evt.managerId}`;
+                  } else if (evt.eventType === 'TruckDeliveryReceived') {
+                    badgeStyle = 'text-emerald-400 bg-emerald-950/80 border-emerald-800';
+                    details = `Received Delivery for PO #${evt.poNumber}`;
+                  }
+
+                  return (
+                    <div key={evt.eventId} className="bg-slate-900 border border-slate-800/80 p-2.5 rounded flex flex-col gap-1.5 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] border font-semibold ${badgeStyle}`}>
+                          {evt.eventType}
+                        </span>
+                        <span className="text-slate-500 text-[10px]">
+                          {new Date(evt.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="text-slate-300 font-mono">{details}</div>
+                      <div className="text-[9px] text-slate-600 truncate font-mono">UUID: {evt.eventId}</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+      {/* TOAST NOTIFICATION CONTAINER */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-md pointer-events-none">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className={`pointer-events-auto border px-4 py-2.5 rounded-lg shadow-xl text-xs font-semibold flex items-center justify-between gap-3 transition-all ${
+              t.type === 'success'
+                ? 'bg-emerald-900/90 border-emerald-700 text-emerald-200'
+                : t.type === 'error'
+                ? 'bg-red-900/90 border-red-700 text-red-200'
+                : t.type === 'warning'
+                ? 'bg-amber-900/90 border-amber-700 text-amber-200'
+                : 'bg-slate-800/90 border-slate-700 text-slate-200'
+            }`}
+          >
+            <span>{t.text}</span>
+          </div>
+        ))}
+      </div>
+
+    </div>
+  );
+}
