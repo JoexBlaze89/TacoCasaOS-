@@ -1,7 +1,4 @@
 name: TacoCasaOS CodeQL
 
-disabled-queries:
-  - java/unused-jdbc-connection
-
 queries:
   - uses: security-extended
