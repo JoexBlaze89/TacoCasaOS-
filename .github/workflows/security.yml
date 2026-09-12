@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# Security jobs only need to read repository contents.
 permissions:
   contents: read
 
@@ -28,9 +27,7 @@ jobs:
           online-audits: true
           annotations: true
           advanced-security: false
-          persona: regular
-          min-severity: medium
-          min-confidence: medium
+          config: .github/zizmor.yml
           version: '1.21.0'
 
   codeql:
@@ -56,6 +53,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: autobuild
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
