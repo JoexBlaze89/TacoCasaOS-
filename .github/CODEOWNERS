@@ -1,0 +1,6 @@
+# Repository ownership and CI/CD security
+# Changes to workflows and repository security configuration require review.
+
+.github/workflows/ @JoexBlaze89
+.github/CODEOWNERS @JoexBlaze89
+.github/dependabot.yml @JoexBlaze89
