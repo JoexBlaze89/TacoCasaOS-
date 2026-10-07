@@ -32,6 +32,9 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Clean Gradle cache
+        run: rm -rf ~/.gradle/daemon ~/.gradle/caches
+
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
 
